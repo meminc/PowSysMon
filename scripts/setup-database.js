@@ -8,7 +8,7 @@ require('dotenv').config({ path: '.env.local' });
 // Database connection for initial setup
 const setupConfig = {
     host: process.env.DATABASE_URL?.split('@')[1]?.split(':')[0] || 'localhost',
-    port: 5431,
+    port: 5432,
     user: 'postgres',
     password: 'password', // Change this to your PostgreSQL superuser password
     database: 'postgres'

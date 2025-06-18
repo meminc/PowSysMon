@@ -1,6 +1,4 @@
-// src/hooks/useAuth.js
 import { create } from 'zustand';
-import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import api from '@/lib/api/client';
 
@@ -15,16 +13,16 @@ const useAuthStore = create((set) => ({
       const response = await api.post('/auth/login', { email, password });
       const { user, tokens } = response.data.data;
       
+      // Store token
+      localStorage.setItem('token', tokens.access);
+      document.cookie = `token=${tokens.access}; path=/; max-age=${7 * 24 * 60 * 60}`;
+      
       set({ 
         user, 
         token: tokens.access, 
         isAuthenticated: true,
         isLoading: false 
       });
-      
-      // Store token in localStorage and cookie
-      localStorage.setItem('token', tokens.access);
-      document.cookie = `token=${tokens.access}; path=/; max-age=${7 * 24 * 60 * 60}`; // 7 days
       
       return { success: true };
     } catch (error) {
@@ -44,27 +42,15 @@ const useAuthStore = create((set) => ({
       set({ user: null, token: null, isAuthenticated: false });
       localStorage.removeItem('token');
       document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT';
+      window.location.href = '/login';
     }
   },
 
-  checkAuth: async () => {
+  checkAuth: () => {
     const token = localStorage.getItem('token');
     if (token) {
-      try {
-        // Verify token with backend
-        const response = await api.get('/auth/me');
-        set({ 
-          user: response.data.data,
-          token, 
-          isAuthenticated: true, 
-          isLoading: false 
-        });
-      } catch (error) {
-        // Token is invalid
-        set({ user: null, token: null, isAuthenticated: false, isLoading: false });
-        localStorage.removeItem('token');
-        document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT';
-      }
+      set({ token, isAuthenticated: true, isLoading: false });
+      // TODO: Optionally verify token with backend
     } else {
       set({ isLoading: false });
     }
@@ -72,18 +58,11 @@ const useAuthStore = create((set) => ({
 }));
 
 export default function useAuth() {
-  const auth = useAuthStore();
-  const router = useRouter();
+  const store = useAuthStore();
 
   useEffect(() => {
-    auth.checkAuth();
+    store.checkAuth();
   }, []);
 
-  const requireAuth = () => {
-    if (!auth.isAuthenticated && !auth.isLoading) {
-      router.push('/login');
-    }
-  };
-
-  return { ...auth, requireAuth };
+  return store;
 }

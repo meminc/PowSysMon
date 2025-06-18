@@ -1,4 +1,4 @@
-// src/app/(auth)/login/page.js
+// src/app/login/page.js
 'use client';
 
 import { useState } from 'react';
@@ -13,7 +13,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Input from '@/components/ui/form/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
-// Validation schema
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
@@ -41,12 +40,18 @@ export default function LoginPage() {
     setIsLoading(true);
     setError('');
 
-    const result = await login(data.email, data.password);
+    try {
+      const result = await login(data.email, data.password);
 
-    if (result.success) {
-      router.push('/');
-    } else {
-      setError(result.error);
+      if (result.success) {
+        router.push('/');
+        router.refresh();
+      } else {
+        setError(result.error);
+        setIsLoading(false);
+      }
+    } catch (err) {
+      setError('An unexpected error occurred');
       setIsLoading(false);
     }
   };
@@ -54,7 +59,6 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <div className="w-full max-w-md">
-        {/* Logo and Title */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 text-white rounded-full mb-4">
             <Zap className="h-8 w-8" />
@@ -69,7 +73,6 @@ export default function LoginPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              {/* Error Alert */}
               {error && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
@@ -77,7 +80,6 @@ export default function LoginPage() {
                 </Alert>
               )}
 
-              {/* Email Field */}
               <div className="space-y-2">
                 <label htmlFor="email" className="text-sm font-medium text-gray-700">
                   Email Address
@@ -95,7 +97,6 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {/* Password Field */}
               <div className="space-y-2">
                 <label htmlFor="password" className="text-sm font-medium text-gray-700">
                   Password
@@ -113,7 +114,6 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {/* Remember me and Forgot password */}
               <div className="flex items-center justify-between">
                 <label className="flex items-center">
                   <input
@@ -127,7 +127,6 @@ export default function LoginPage() {
                 </a>
               </div>
 
-              {/* Submit Button */}
               <Button
                 type="submit"
                 className="w-full"
@@ -144,7 +143,6 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            {/* Demo Credentials */}
             <div className="mt-6 p-4 bg-blue-50 rounded-lg">
               <p className="text-sm font-medium text-blue-900 mb-2">Demo Credentials:</p>
               <div className="space-y-1 text-sm text-blue-700">
@@ -155,9 +153,8 @@ export default function LoginPage() {
           </CardContent>
         </Card>
 
-        {/* Footer */}
         <p className="text-center text-sm text-gray-600 mt-8">
-          © 2025 Grid Monitoring System. All rights reserved.
+          © 2024 Grid Monitoring System. All rights reserved.
         </p>
       </div>
     </div>
