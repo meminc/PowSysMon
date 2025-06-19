@@ -125,8 +125,8 @@ CREATE INDEX idx_secondary_bus ON transformers(secondary_bus_id);
 -- Transmission lines table
 CREATE TABLE IF NOT EXISTS transmission_lines (
     id UUID PRIMARY KEY REFERENCES grid_elements(id) ON DELETE CASCADE,
-    from_bus_id UUID NOT NULL REFERENCES buses(id),
-    to_bus_id UUID NOT NULL REFERENCES buses(id),
+    start_bus_id UUID REFERENCES buses(id),
+    end_bus_id UUID REFERENCES buses(id),
     length DECIMAL(10, 2) NOT NULL,
     voltage_level DECIMAL(10, 2) NOT NULL,
     conductor_type VARCHAR(20),
@@ -135,12 +135,30 @@ CREATE TABLE IF NOT EXISTS transmission_lines (
     resistance DECIMAL(10, 6),
     reactance DECIMAL(10, 6),
     capacitance DECIMAL(10, 6),
-    CHECK (from_bus_id != to_bus_id)
+    CHECK (start_bus_id != end_bus_id)
 );
 
-CREATE INDEX idx_from_bus ON transmission_lines(from_bus_id);
-CREATE INDEX idx_to_bus ON transmission_lines(to_bus_id);
-CREATE INDEX idx_bus_pair ON transmission_lines(from_bus_id, to_bus_id);
+CREATE INDEX idx_from_bus ON transmission_lines(start_bus_id);
+CREATE INDEX idx_to_bus ON transmission_lines(end_bus_id);
+CREATE INDEX idx_bus_pair ON transmission_lines(start_bus_id, end_bus_id);
+
+-- Create line_coordinates table for storing multiple points
+CREATE TABLE IF NOT EXISTS line_coordinates (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    line_id UUID NOT NULL REFERENCES transmission_lines(id) ON DELETE CASCADE,
+    sequence_order INTEGER NOT NULL,
+    latitude DECIMAL(10, 8) NOT NULL,
+    longitude DECIMAL(11, 8) NOT NULL,
+    elevation DECIMAL(8, 2), -- Optional elevation in meters
+    point_type VARCHAR(20) DEFAULT 'intermediate', -- 'start', 'end', 'intermediate', 'tower', 'junction'
+    description TEXT, -- Optional description for the point
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(line_id, sequence_order)
+);
+
+-- Create indexes for performance
+CREATE INDEX idx_line_coordinates_line_id ON line_coordinates(line_id);
+CREATE INDEX idx_line_coordinates_sequence ON line_coordinates(line_id, sequence_order);
 
 -- Network topology connections
 CREATE TABLE IF NOT EXISTS network_connections (
@@ -351,8 +369,8 @@ SELECT
             'secondary_bus_id', t.secondary_bus_id
         )
         WHEN e.element_type = 'line' THEN jsonb_build_object(
-            'from_bus_id', tl.from_bus_id,
-            'to_bus_id', tl.to_bus_id,
+            'start_bus_id', tl.start_bus_id,
+            'end_bus_id', tl.end_bus_id,
             'length', tl.length,
             'voltage_level', tl.voltage_level,
             'rated_current', tl.rated_current

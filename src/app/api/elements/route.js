@@ -112,17 +112,29 @@ export const GET = authMiddleware(asyncHandler(async (request) => {
           'primary_bus_id', t.primary_bus_id,
           'secondary_bus_id', t.secondary_bus_id
         )
-        WHEN e.element_type = 'line' THEN jsonb_build_object(
-          'from_bus_id', tl.from_bus_id,
-          'to_bus_id', tl.to_bus_id,
-          'length', tl.length,
-          'voltage_level', tl.voltage_level,
-          'conductor_type', tl.conductor_type,
-          'configuration', tl.configuration,
-          'rated_current', tl.rated_current,
-          'resistance', tl.resistance,
-          'reactance', tl.reactance,
-          'capacitance', tl.capacitance
+        WHEN e.element_type = 'line' THEN (
+          SELECT jsonb_build_object(
+            'voltage_level', tl.voltage_level,
+            'length', tl.length,
+            'conductor_type', tl.conductor_type,
+            'rated_current', tl.rated_current,
+            'resistance', tl.resistance,
+            'reactance', tl.reactance,
+            'coordinates', COALESCE(
+              (SELECT json_agg(
+                json_build_object(
+                  'id', lc.id,
+                  'sequence_order', lc.sequence_order,
+                  'latitude', lc.latitude,
+                  'longitude', lc.longitude,
+                  'elevation', lc.elevation,
+                  'point_type', lc.point_type,
+                  'description', lc.description
+                ) ORDER BY lc.sequence_order
+              ) FROM line_coordinates lc WHERE lc.line_id = tl.id),
+              '[]'::json
+            )
+          ) FROM transmission_lines tl WHERE tl.id = e.id
         )
         WHEN e.element_type = 'bus' THEN jsonb_build_object(
           'voltage_level', b.voltage_level,
@@ -159,7 +171,6 @@ export const GET = authMiddleware(asyncHandler(async (request) => {
 export const POST = operatorOnly(asyncHandler(async (request) => {
   const body = await request.json();
   const validated = await validate(createElementSchema)(body);
-
   const result = await withTransaction(async (client) => {
     // Check for duplicate names
     const existing = await client.query(
@@ -275,30 +286,64 @@ export const POST = operatorOnly(asyncHandler(async (request) => {
         }
         break;
 
-      case 'line':
-        if (validated.line_properties) {
-          const lineResult = await client.query(`
-            INSERT INTO transmission_lines (
-              id, from_bus_id, to_bus_id, length, voltage_level,
-              conductor_type, configuration, rated_current,
-              resistance, reactance, capacitance
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-            RETURNING *
-          `, [
-            element.id,
-            validated.line_properties.from_bus_id,
-            validated.line_properties.to_bus_id,
-            validated.line_properties.length,
-            validated.line_properties.voltage_level,
-            validated.line_properties.conductor_type,
-            validated.line_properties.configuration,
-            validated.line_properties.rated_current,
-            validated.line_properties.resistance,
-            validated.line_properties.reactance,
-            validated.line_properties.capacitance
-          ]);
-          properties = lineResult.rows[0];
-        }
+        case 'line':
+          if (validated.line_properties) {
+            const lineResult = await client.query(`
+              INSERT INTO transmission_lines (
+                id, voltage_level, conductor_type, rated_current,
+                resistance, reactance, length
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+              RETURNING *
+            `, [
+              element.id,
+              validated.line_properties.voltage_level,
+              validated.line_properties.conductor_type,
+              validated.line_properties.rated_current,
+              validated.line_properties.resistance,
+              validated.line_properties.reactance,
+              validated.line_properties.length || 0
+            ]);
+  
+            // Insert line coordinates if provided
+            if (validated.line_properties.coordinates && validated.line_properties.coordinates.length >= 2) {
+              let totalLength = 0;
+              
+              for (let i = 0; i < validated.line_properties.coordinates.length; i++) {
+                const coord = validated.line_properties.coordinates[i];
+                await client.query(`
+                  INSERT INTO line_coordinates (
+                    line_id, sequence_order, latitude, longitude,
+                    elevation, point_type, description
+                  ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+                `, [
+                  element.id,
+                  i,
+                  coord.latitude,
+                  coord.longitude,
+                  coord.elevation || null,
+                  coord.point_type,
+                  coord.description
+                ]);
+  
+                // Calculate distance for length
+                if (i > 0) {
+                  const prev = validated.line_properties.coordinates[i - 1];
+                  totalLength += haversineDistance(
+                    prev.latitude, prev.longitude,
+                    coord.latitude, coord.longitude
+                  );
+                }
+              }
+  
+              // Update calculated length
+              await client.query(
+                'UPDATE transmission_lines SET length = $2 WHERE id = $1',
+                [element.id, totalLength]
+              );
+            }
+  
+            properties = lineResult.rows[0];
+          }
         break;
 
       case 'bus':
@@ -346,3 +391,16 @@ export const POST = operatorOnly(asyncHandler(async (request) => {
 
   return createdResponse(result, 'Element created successfully');
 }));
+
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Earth's radius in kilometers
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}

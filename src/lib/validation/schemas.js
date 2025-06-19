@@ -24,7 +24,12 @@ export const elementSchema = z.object({
     manufacturer: z.string().max(255).optional(),
     model: z.string().max(255).optional(),
     installation_date: z.string().datetime().optional(),
-    metadata: z.record(z.any()).optional()
+    metadata: z.record(z.any()).optional(),
+    search: z.string().optional(),
+    type: z.string().optional(),
+    status: z.string().optional(),
+    page: z.coerce.number().default(1),
+    limit: z.coerce.number().default(20)
 });
 
 // Load specific schema
