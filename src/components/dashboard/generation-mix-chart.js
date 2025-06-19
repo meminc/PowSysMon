@@ -113,7 +113,6 @@ export default function GenerationMixChart() {
                 height={36}
                 formatter={(value, entry) => {
                   const v = typeof entry?.value === 'number' ? entry.value.toFixed(2) : '0.00';
-                  console.log("HERE", entry);
                   return <span className="text-sm">{value} ({v} MW)</span>;
                 }}
               />

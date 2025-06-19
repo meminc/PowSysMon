@@ -70,19 +70,19 @@ export default function NetworkStatus({ measurements, connectionStatus }) {
             <div>
               <p className="text-sm text-gray-600">System Voltage</p>
               <p className="text-xl font-semibold">
-                {realtimeData.voltage || '132.0'} kV
+                {realtimeData.voltage?.toFixed(1) || '132.0'} kV
               </p>
             </div>
             <div>
               <p className="text-sm text-gray-600">Power Flow</p>
               <p className="text-xl font-semibold">
-                {realtimeData.power || '156.8'} MW
+                {realtimeData.power?.toFixed(2) || '156.8'} MW
               </p>
             </div>
             <div>
               <p className="text-sm text-gray-600">Efficiency</p>
               <p className="text-xl font-semibold text-green-600">
-                {realtimeData.efficiency || '98.5'}%
+                {realtimeData.efficiency?.toFixed(2) || '98.5'}%
               </p>
             </div>
           </div>
