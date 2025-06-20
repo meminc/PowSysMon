@@ -1,0 +1,285 @@
+/* src/styles/map.css */
+
+/* Leaflet map customizations */
+.leaflet-container {
+    font-family: inherit;
+    background: #f8fafc;
+  }
+  
+  .leaflet-popup-content-wrapper {
+    border-radius: 8px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  }
+  
+  .leaflet-popup-content {
+    margin: 0;
+    line-height: 1.4;
+  }
+  
+  .leaflet-popup-tip {
+    background: white;
+    border: none;
+    box-shadow: 0 3px 14px rgba(0, 0, 0, 0.1);
+  }
+  
+  /* Element markers */
+  .element-marker {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  
+  .element-marker:hover {
+    transform: scale(1.1);
+    z-index: 1000;
+  }
+  
+  /* Measurement overlays */
+  .measurement-overlay {
+    background: transparent;
+    border: none;
+    pointer-events: none;
+  }
+  
+  /* Custom control styles */
+  .leaflet-control-layers {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  }
+  
+  .leaflet-control-layers-expanded {
+    padding: 12px;
+  }
+  
+  .leaflet-control-layers-base label,
+  .leaflet-control-layers-overlays label {
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  /* Transmission line styles */
+  .transmission-line {
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  
+  .transmission-line:hover {
+    filter: brightness(1.2);
+    stroke-width: 6px;
+  }
+  
+  /* Line voltage colors */
+  .voltage-ehv {
+    stroke: #dc2626; /* Extra High Voltage (>= 500kV) - Red */
+    stroke-width: 6px;
+  }
+  
+  .voltage-hv {
+    stroke: #ea580c; /* High Voltage (230-499kV) - Orange */
+    stroke-width: 5px;
+  }
+  
+  .voltage-mv {
+    stroke: #d97706; /* Medium Voltage (69-229kV) - Amber */
+    stroke-width: 4px;
+  }
+  
+  .voltage-lv {
+    stroke: #65a30d; /* Low Voltage (12-68kV) - Green */
+    stroke-width: 3px;
+  }
+  
+  .voltage-unknown {
+    stroke: #6b7280; /* Unknown voltage - Gray */
+    stroke-width: 2px;
+  }
+  
+  /* Element status animations */
+  .element-fault {
+    animation: pulse-red 2s infinite;
+  }
+  
+  .element-maintenance {
+    animation: pulse-yellow 3s infinite;
+  }
+  
+  @keyframes pulse-red {
+    0%, 100% {
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+    }
+    50% {
+      box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+    }
+  }
+  
+  @keyframes pulse-yellow {
+    0%, 100% {
+      box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7);
+    }
+    50% {
+      box-shadow: 0 0 0 10px rgba(245, 158, 11, 0);
+    }
+  }
+  
+  /* Real-time data indicators */
+  .realtime-indicator {
+    position: relative;
+  }
+  
+  .realtime-indicator::after {
+    content: '';
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 8px;
+    height: 8px;
+    background: #10b981;
+    border-radius: 50%;
+    animation: pulse-green 2s infinite;
+  }
+  
+  @keyframes pulse-green {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.5;
+      transform: scale(1.2);
+    }
+  }
+  
+  /* Map controls */
+  .map-controls {
+    position: absolute;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  }
+  
+  /* Responsive adjustments */
+  @media (max-width: 768px) {
+    .element-marker {
+      transform: scale(0.8);
+    }
+    
+    .leaflet-popup-content-wrapper {
+      max-width: 250px;
+    }
+    
+    .measurement-overlay {
+      font-size: 10px;
+    }
+  }
+  
+  /* Dark mode support */
+  @media (prefers-color-scheme: dark) {
+    .leaflet-container {
+      background: #1f2937;
+    }
+    
+    .leaflet-popup-content-wrapper {
+      background: #374151;
+      color: #f9fafb;
+    }
+    
+    .leaflet-popup-tip {
+      background: #374151;
+    }
+    
+    .map-controls {
+      background: rgba(55, 65, 81, 0.95);
+      color: #f9fafb;
+    }
+  }
+  
+  /* Loading states */
+  .map-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 400px;
+    background: #f8fafc;
+    border-radius: 8px;
+  }
+  
+  .map-loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #e5e7eb;
+    border-left: 4px solid #3b82f6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  
+  /* Element selection highlight */
+  .element-selected {
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.5);
+    border-radius: 50%;
+    animation: pulse-blue 2s infinite;
+  }
+  
+  @keyframes pulse-blue {
+    0%, 100% {
+      box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.5);
+    }
+    50% {
+      box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.2);
+    }
+  }
+  
+  /* Network topology overlay */
+  .topology-overlay {
+    pointer-events: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 500;
+  }
+  
+  /* Connection lines between elements */
+  .connection-line {
+    stroke: #6b7280;
+    stroke-width: 2;
+    stroke-dasharray: 5,5;
+    opacity: 0.7;
+    transition: all 0.2s ease;
+  }
+  
+  .connection-line:hover {
+    stroke: #3b82f6;
+    stroke-width: 3;
+    opacity: 1;
+  }
+  
+  /* Bus connection points */
+  .bus-connection {
+    fill: #3b82f6;
+    stroke: #ffffff;
+    stroke-width: 2;
+    r: 4;
+    transition: all 0.2s ease;
+  }
+  
+  .bus-connection:hover {
+    r: 6;
+    fill: #1d4ed8;
+  }

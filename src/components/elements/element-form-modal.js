@@ -1,14 +1,17 @@
+// src/components/elements/element-form-modal.js
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { X, Save, Loader2 } from 'lucide-react';
+import { X, Save, Loader2, AlertCircle } from 'lucide-react';
 import Button from '@/components/ui/button';
 import Input from '@/components/ui/form/input';
 import LineCoordinatesForm from '@/components/elements/line-coordinates-form';
+import BusConnectionSelector from '@/components/elements/bus-connection-selector';
 import { useCreateElement, useUpdateElement } from '@/hooks/api/useElements';
+import { useElements } from '@/hooks/api/useElements';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
@@ -24,7 +27,20 @@ const baseElementSchema = z.object({
   model: z.string().optional(),
 });
 
-// Type-specific schemas
+// Connection schemas for validation
+const singleConnectionSchema = z.object({
+  bus_id: z.string().uuid('Please select a bus connection')
+});
+
+const dualConnectionSchema = z.object({
+  from_bus_id: z.string().uuid('Please select the first bus connection'),
+  to_bus_id: z.string().uuid('Please select the second bus connection')
+}).refine(data => data.from_bus_id !== data.to_bus_id, {
+  message: "Both connections cannot be the same bus",
+  path: ['to_bus_id']
+});
+
+// Type-specific schemas with connection validation
 const loadPropertiesSchema = z.object({
   load_type: z.enum(['residential', 'commercial', 'industrial']),
   connection_type: z.enum(['single_phase', 'three_phase']),
@@ -32,6 +48,7 @@ const loadPropertiesSchema = z.object({
   power_factor: z.coerce.number().min(0).max(1),
   voltage_level: z.coerce.number().positive('Voltage level must be positive'),
   priority: z.enum(['critical', 'high', 'medium', 'low']),
+  connections: singleConnectionSchema
 });
 
 const generatorPropertiesSchema = z.object({
@@ -42,6 +59,7 @@ const generatorPropertiesSchema = z.object({
   efficiency: z.coerce.number().min(0).max(1).optional(),
   fuel_type: z.string().optional(),
   voltage_level: z.coerce.number().positive('Voltage level must be positive'),
+  connections: singleConnectionSchema
 });
 
 const busPropertiesSchema = z.object({
@@ -57,11 +75,12 @@ const transformerPropertiesSchema = z.object({
   current_tap: z.coerce.number().int().optional(),
   winding_configuration: z.string().optional(),
   cooling_type: z.string().optional(),
+  connections: dualConnectionSchema
 });
 
 const linePropertiesSchema = z.object({
   voltage_level: z.coerce.number().positive('Voltage level must be positive'),
-  length: z.coerce.number().positive().optional(), // Auto-calculated
+  length: z.coerce.number().positive().optional(),
   conductor_type: z.string().optional(),
   rated_current: z.coerce.number().positive().optional(),
   resistance: z.coerce.number().nonnegative().optional(),
@@ -72,7 +91,8 @@ const linePropertiesSchema = z.object({
     elevation: z.coerce.number().optional(),
     point_type: z.enum(['start', 'end', 'intermediate', 'tower', 'junction']),
     description: z.string().optional()
-  })).min(2, 'At least 2 coordinate points are required')
+  })).min(2, 'At least 2 coordinate points are required'),
+  connections: dualConnectionSchema
 });
 
 const ELEMENT_TYPES = [
@@ -86,11 +106,16 @@ const ELEMENT_TYPES = [
 export default function ElementFormModal({ element, onClose }) {
   const [elementType, setElementType] = useState(element?.element_type || 'load');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [connectionErrors, setConnectionErrors] = useState([]);
   
   const createElement = useCreateElement();
   const updateElement = useUpdateElement();
   
   const isEditing = !!element;
+
+  // Fetch all buses for connection selection
+  const { data: busesData } = useElements({ type: 'bus', limit: 50 });
+  const availableBuses = busesData?.data || [];
 
   // Dynamic schema based on element type
   const getSchema = () => {
@@ -136,6 +161,8 @@ export default function ElementFormModal({ element, onClose }) {
     reset,
     watch,
     setValue,
+    setError,
+    clearErrors,
   } = useForm({
     resolver: zodResolver(getSchema()),
     defaultValues: {
@@ -152,6 +179,9 @@ export default function ElementFormModal({ element, onClose }) {
     },
   });
 
+  // Watch for form changes to validate connections
+  const watchedValues = watch();
+
   // Update form when element type changes
   useEffect(() => {
     setValue('type', elementType);
@@ -159,11 +189,13 @@ export default function ElementFormModal({ element, onClose }) {
     Object.entries(defaults).forEach(([key, value]) => {
       setValue(key, value);
     });
+    setConnectionErrors([]);
   }, [elementType, setValue]);
 
   // Load existing element data
   useEffect(() => {
     if (element) {
+      const connections = getElementConnections(element);
       reset({
         type: element.element_type,
         name: element.name,
@@ -174,11 +206,19 @@ export default function ElementFormModal({ element, onClose }) {
         address: element.address || '',
         manufacturer: element.manufacturer || '',
         model: element.model || '',
-        [`${element.element_type}_properties`]: element.properties || getDefaultProperties(element.element_type)[`${element.element_type}_properties`],
+        [`${element.element_type}_properties`]: {
+          ...element.properties,
+          connections
+        },
       });
       setElementType(element.element_type);
     }
   }, [element, reset]);
+
+  // Validate connections when form values change
+  useEffect(() => {
+    validateConnections();
+  }, [watchedValues, availableBuses]);
 
   function getDefaultProperties(type) {
     const defaults = {
@@ -190,6 +230,7 @@ export default function ElementFormModal({ element, onClose }) {
           power_factor: '0.95',
           voltage_level: '',
           priority: 'medium',
+          connections: { bus_id: '' }
         }
       },
       generator: {
@@ -201,6 +242,7 @@ export default function ElementFormModal({ element, onClose }) {
           efficiency: '0.95',
           fuel_type: '',
           voltage_level: '',
+          connections: { bus_id: '' }
         }
       },
       bus: {
@@ -218,6 +260,7 @@ export default function ElementFormModal({ element, onClose }) {
           current_tap: '0',
           winding_configuration: '',
           cooling_type: '',
+          connections: { from_bus_id: '', to_bus_id: '' }
         }
       },
       line: {
@@ -231,7 +274,8 @@ export default function ElementFormModal({ element, onClose }) {
           coordinates: [
             { latitude: '', longitude: '', elevation: '', point_type: 'start', description: 'Starting point' },
             { latitude: '', longitude: '', elevation: '', point_type: 'end', description: 'Ending point' }
-          ]
+          ],
+          connections: { from_bus_id: '', to_bus_id: '' }
         }
       }
     };
@@ -239,7 +283,103 @@ export default function ElementFormModal({ element, onClose }) {
     return defaults[type] || {};
   }
 
+  function getElementConnections(element) {
+    const props = element.properties || {};
+    
+    switch (element.element_type) {
+      case 'load':
+      case 'generator':
+        return { bus_id: props.bus_id || '' };
+      case 'transformer':
+        return { 
+          from_bus_id: props.primary_bus_id || '', 
+          to_bus_id: props.secondary_bus_id || '' 
+        };
+      case 'line':
+        return { 
+          from_bus_id: props.from_bus_id || '', 
+          to_bus_id: props.to_bus_id || '' 
+        };
+      default:
+        return {};
+    }
+  }
+
+  function validateConnections() {
+    const errors = [];
+    const currentProps = watchedValues[`${elementType}_properties`];
+    
+    if (!currentProps || !currentProps.connections) return;
+
+    const connections = currentProps.connections;
+    const elementVoltage = currentProps.voltage_level;
+
+    switch (elementType) {
+      case 'load':
+      case 'generator':
+        if (connections.bus_id && elementVoltage) {
+          const bus = availableBuses.find(b => b.id === connections.bus_id);
+          if (bus && bus.properties?.voltage_level !== parseFloat(elementVoltage)) {
+            errors.push(`Element voltage (${elementVoltage} kV) must match bus voltage (${bus.properties?.voltage_level} kV)`);
+          }
+        }
+        break;
+
+      case 'transformer':
+        if (connections.from_bus_id && connections.to_bus_id) {
+          if (connections.from_bus_id === connections.to_bus_id) {
+            errors.push('Primary and secondary buses cannot be the same');
+          }
+
+          const primaryBus = availableBuses.find(b => b.id === connections.from_bus_id);
+          const secondaryBus = availableBuses.find(b => b.id === connections.to_bus_id);
+
+          if (primaryBus && currentProps.primary_voltage) {
+            if (primaryBus.properties?.voltage_level !== parseFloat(currentProps.primary_voltage)) {
+              errors.push(`Primary voltage (${currentProps.primary_voltage} kV) must match primary bus voltage (${primaryBus.properties?.voltage_level} kV)`);
+            }
+          }
+
+          if (secondaryBus && currentProps.secondary_voltage) {
+            if (secondaryBus.properties?.voltage_level !== parseFloat(currentProps.secondary_voltage)) {
+              errors.push(`Secondary voltage (${currentProps.secondary_voltage} kV) must match secondary bus voltage (${secondaryBus.properties?.voltage_level} kV)`);
+            }
+          }
+        }
+        break;
+
+      case 'line':
+        if (connections.from_bus_id && connections.to_bus_id) {
+          if (connections.from_bus_id === connections.to_bus_id) {
+            errors.push('Start and end buses cannot be the same');
+          }
+
+          if (elementVoltage) {
+            const fromBus = availableBuses.find(b => b.id === connections.from_bus_id);
+            const toBus = availableBuses.find(b => b.id === connections.to_bus_id);
+
+            if (fromBus && fromBus.properties?.voltage_level !== parseFloat(elementVoltage)) {
+              errors.push(`Line voltage (${elementVoltage} kV) must match start bus voltage (${fromBus.properties?.voltage_level} kV)`);
+            }
+
+            if (toBus && toBus.properties?.voltage_level !== parseFloat(elementVoltage)) {
+              errors.push(`Line voltage (${elementVoltage} kV) must match end bus voltage (${toBus.properties?.voltage_level} kV)`);
+            }
+          }
+        }
+        break;
+    }
+
+    // setConnectionErrors(errors);
+  }
+
   const onSubmit = async (data) => {
+    // Final validation before submission
+    if (connectionErrors.length > 0) {
+      toast.error('Please fix connection errors before submitting');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const formattedData = {
@@ -291,9 +431,6 @@ export default function ElementFormModal({ element, onClose }) {
                   <option value="commercial">Commercial</option>
                   <option value="industrial">Industrial</option>
                 </select>
-                {errors.load_properties?.load_type && (
-                  <p className="text-red-500 text-sm mt-1">{errors.load_properties.load_type.message}</p>
-                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -309,7 +446,7 @@ export default function ElementFormModal({ element, onClose }) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Rated Power (MW)
+                  Rated Power (MW) *
                 </label>
                 <Input
                   type="number"
@@ -333,7 +470,7 @@ export default function ElementFormModal({ element, onClose }) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Voltage Level (kV)
+                  Voltage Level (kV) *
                 </label>
                 <Input
                   type="number"
@@ -357,6 +494,16 @@ export default function ElementFormModal({ element, onClose }) {
                 </select>
               </div>
             </div>
+
+            {/* Bus Connection */}
+            <BusConnectionSelector
+              label="Connected Bus *"
+              buses={availableBuses}
+              value={watchedValues.load_properties?.connections?.bus_id || ''}
+              onChange={(busId) => setValue('load_properties.connections.bus_id', busId)}
+              error={errors.load_properties?.connections?.bus_id?.message}
+              voltageLevel={watchedValues.load_properties?.voltage_level}
+            />
           </div>
         );
 
@@ -383,7 +530,7 @@ export default function ElementFormModal({ element, onClose }) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Rated Capacity (MW)
+                  Rated Capacity (MW) *
                 </label>
                 <Input
                   type="number"
@@ -405,7 +552,7 @@ export default function ElementFormModal({ element, onClose }) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Max Capacity (MW)
+                  Max Capacity (MW) *
                 </label>
                 <Input
                   type="number"
@@ -429,7 +576,7 @@ export default function ElementFormModal({ element, onClose }) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Voltage Level (kV)
+                  Voltage Level (kV) *
                 </label>
                 <Input
                   type="number"
@@ -448,6 +595,16 @@ export default function ElementFormModal({ element, onClose }) {
                 />
               </div>
             </div>
+
+            {/* Bus Connection */}
+            <BusConnectionSelector
+              label="Connected Bus *"
+              buses={availableBuses}
+              value={watchedValues.generator_properties?.connections?.bus_id || ''}
+              onChange={(busId) => setValue('generator_properties.connections.bus_id', busId)}
+              error={errors.generator_properties?.connections?.bus_id?.message}
+              voltageLevel={watchedValues.generator_properties?.voltage_level}
+            />
           </div>
         );
 
@@ -458,7 +615,7 @@ export default function ElementFormModal({ element, onClose }) {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Voltage Level (kV)
+                  Voltage Level (kV) *
                 </label>
                 <Input
                   type="number"
@@ -501,7 +658,7 @@ export default function ElementFormModal({ element, onClose }) {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Primary Voltage (kV)
+                  Primary Voltage (kV) *
                 </label>
                 <Input
                   type="number"
@@ -512,7 +669,7 @@ export default function ElementFormModal({ element, onClose }) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Secondary Voltage (kV)
+                  Secondary Voltage (kV) *
                 </label>
                 <Input
                   type="number"
@@ -523,7 +680,7 @@ export default function ElementFormModal({ element, onClose }) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Rated Power (MVA)
+                  Rated Power (MVA) *
                 </label>
                 <Input
                   type="number"
@@ -560,17 +717,64 @@ export default function ElementFormModal({ element, onClose }) {
                 />
               </div>
             </div>
+
+            {/* Bus Connections */}
+            <div className="grid grid-cols-2 gap-4">
+              <BusConnectionSelector
+                label="Primary Bus *"
+                buses={availableBuses}
+                value={watchedValues.transformer_properties?.connections?.from_bus_id || ''}
+                onChange={(busId) => setValue('transformer_properties.connections.from_bus_id', busId)}
+                error={errors.transformer_properties?.connections?.from_bus_id?.message}
+                voltageLevel={watchedValues.transformer_properties?.primary_voltage}
+                excludeBusId={watchedValues.transformer_properties?.connections?.to_bus_id}
+              />
+              <BusConnectionSelector
+                label="Secondary Bus *"
+                buses={availableBuses}
+                value={watchedValues.transformer_properties?.connections?.to_bus_id || ''}
+                onChange={(busId) => setValue('transformer_properties.connections.to_bus_id', busId)}
+                error={errors.transformer_properties?.connections?.to_bus_id?.message}
+                voltageLevel={watchedValues.transformer_properties?.secondary_voltage}
+                excludeBusId={watchedValues.transformer_properties?.connections?.from_bus_id}
+              />
+            </div>
           </div>
         );
 
       case 'line':
-        return <LineCoordinatesForm register={register} errors={errors} watch={watch} setValue={setValue} />;
+        return (
+          <div className="space-y-4">
+            <LineCoordinatesForm register={register} errors={errors} watch={watch} setValue={setValue} />
+            
+            {/* Bus Connections */}
+            <div className="grid grid-cols-2 gap-4 mt-6">
+              <BusConnectionSelector
+                label="Start Bus *"
+                buses={availableBuses}
+                value={watchedValues.line_properties?.connections?.from_bus_id || ''}
+                onChange={(busId) => setValue('line_properties.connections.from_bus_id', busId)}
+                error={errors.line_properties?.connections?.from_bus_id?.message}
+                voltageLevel={watchedValues.line_properties?.voltage_level}
+                excludeBusId={watchedValues.line_properties?.connections?.to_bus_id}
+              />
+              <BusConnectionSelector
+                label="End Bus *"
+                buses={availableBuses}
+                value={watchedValues.line_properties?.connections?.to_bus_id || ''}
+                onChange={(busId) => setValue('line_properties.connections.to_bus_id', busId)}
+                error={errors.line_properties?.connections?.to_bus_id?.message}
+                voltageLevel={watchedValues.line_properties?.voltage_level}
+                excludeBusId={watchedValues.line_properties?.connections?.from_bus_id}
+              />
+            </div>
+          </div>
+        );
 
       default:
         return null;
     }
-  };
-
+  }
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden">

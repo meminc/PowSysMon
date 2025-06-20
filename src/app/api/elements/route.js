@@ -287,63 +287,63 @@ export const POST = operatorOnly(asyncHandler(async (request) => {
         break;
 
         case 'line':
-          if (validated.line_properties) {
-            const lineResult = await client.query(`
-              INSERT INTO transmission_lines (
-                id, voltage_level, conductor_type, rated_current,
-                resistance, reactance, length
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-              RETURNING *
-            `, [
-              element.id,
-              validated.line_properties.voltage_level,
-              validated.line_properties.conductor_type,
-              validated.line_properties.rated_current,
-              validated.line_properties.resistance,
-              validated.line_properties.reactance,
-              validated.line_properties.length || 0
-            ]);
-  
-            // Insert line coordinates if provided
-            if (validated.line_properties.coordinates && validated.line_properties.coordinates.length >= 2) {
-              let totalLength = 0;
-              
-              for (let i = 0; i < validated.line_properties.coordinates.length; i++) {
-                const coord = validated.line_properties.coordinates[i];
-                await client.query(`
-                  INSERT INTO line_coordinates (
-                    line_id, sequence_order, latitude, longitude,
-                    elevation, point_type, description
-                  ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-                `, [
-                  element.id,
-                  i,
-                  coord.latitude,
-                  coord.longitude,
-                  coord.elevation || null,
-                  coord.point_type,
-                  coord.description
-                ]);
-  
-                // Calculate distance for length
-                if (i > 0) {
-                  const prev = validated.line_properties.coordinates[i - 1];
-                  totalLength += haversineDistance(
-                    prev.latitude, prev.longitude,
-                    coord.latitude, coord.longitude
-                  );
-                }
+        if (validated.line_properties) {
+          const lineResult = await client.query(`
+            INSERT INTO transmission_lines (
+              id, voltage_level, conductor_type, rated_current,
+              resistance, reactance, length
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING *
+          `, [
+            element.id,
+            validated.line_properties.voltage_level,
+            validated.line_properties.conductor_type,
+            validated.line_properties.rated_current,
+            validated.line_properties.resistance,
+            validated.line_properties.reactance,
+            validated.line_properties.length || 0
+          ]);
+
+          // Insert line coordinates if provided
+          if (validated.line_properties.coordinates && validated.line_properties.coordinates.length >= 2) {
+            let totalLength = 0;
+            
+            for (let i = 0; i < validated.line_properties.coordinates.length; i++) {
+              const coord = validated.line_properties.coordinates[i];
+              await client.query(`
+                INSERT INTO line_coordinates (
+                  line_id, sequence_order, latitude, longitude,
+                  elevation, point_type, description
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+              `, [
+                element.id,
+                i,
+                coord.latitude,
+                coord.longitude,
+                coord.elevation || null,
+                coord.point_type,
+                coord.description
+              ]);
+
+              // Calculate distance for length
+              if (i > 0) {
+                const prev = validated.line_properties.coordinates[i - 1];
+                totalLength += haversineDistance(
+                  prev.latitude, prev.longitude,
+                  coord.latitude, coord.longitude
+                );
               }
-  
-              // Update calculated length
-              await client.query(
-                'UPDATE transmission_lines SET length = $2 WHERE id = $1',
-                [element.id, totalLength]
-              );
             }
-  
-            properties = lineResult.rows[0];
+
+            // Update calculated length
+            await client.query(
+              'UPDATE transmission_lines SET length = $2 WHERE id = $1',
+              [element.id, totalLength]
+            );
           }
+
+          properties = lineResult.rows[0];
+        }
         break;
 
       case 'bus':
@@ -392,6 +392,7 @@ export const POST = operatorOnly(asyncHandler(async (request) => {
   return createdResponse(result, 'Element created successfully');
 }));
 
+// Helper function to add to the route file
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 6371; // Earth's radius in kilometers
   const dLat = (lat2 - lat1) * Math.PI / 180;

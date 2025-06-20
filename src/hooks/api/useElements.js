@@ -20,7 +20,7 @@ export function useElement(id) {
 
 export function useCreateElement() {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: (data) => api.post('/elements', data).then(res => res.data),
     onSuccess: () => {

@@ -338,7 +338,7 @@ export default function ElementsPage() {
                     <Button size="sm" variant="secondary">
                       Bulk Edit
                     </Button>
-                    <Button size="sm" variant="danger">
+                    <Button size="sm" variant="danger" onClick={() => handleDelete(selectedElements)}>
                       Delete Selected
                     </Button>
                   </div>
@@ -599,6 +599,7 @@ export default function ElementsPage() {
         <DeleteConfirmModal
           isOpen={showDeleteModal}
           title="Delete Element"
+          //message={`Are you sure you want to delete "${selectedElement.name}"? This action cannot be undone.`}
           message={`Are you sure you want to delete "${selectedElement.name}"? This action cannot be undone.`}
           onConfirm={confirmDelete}
           onCancel={() => {

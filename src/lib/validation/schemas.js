@@ -32,6 +32,19 @@ export const elementSchema = z.object({
     limit: z.coerce.number().default(20)
 });
 
+// Connection schemas for validation
+const singleConnectionSchema = z.object({
+    bus_id: z.string().uuid('Please select a bus connection')
+});
+  
+const dualConnectionSchema = z.object({
+        from_bus_id: z.string().uuid('Please select the first bus connection'),
+        to_bus_id: z.string().uuid('Please select the second bus connection')
+    }).refine(data => data.from_bus_id !== data.to_bus_id, {
+        message: "Both connections cannot be the same bus",
+        path: ['to_bus_id']
+});
+
 // Load specific schema
 export const loadSchema = elementSchema.extend({
     type: z.literal('load'),
@@ -42,7 +55,8 @@ export const loadSchema = elementSchema.extend({
         power_factor: z.number().min(0).max(1),
         voltage_level: z.number().positive(),
         priority: z.enum(['critical', 'high', 'medium', 'low']).optional(),
-        bus_id: z.string().uuid().optional()
+        bus_id: z.string().uuid().optional(),
+        connections: singleConnectionSchema
     })
 });
 
@@ -58,7 +72,8 @@ export const generatorSchema = elementSchema.extend({
         efficiency: z.number().min(0).max(1).optional(),
         fuel_type: z.string().max(50).optional(),
         voltage_level: z.number().positive(),
-        bus_id: z.string().uuid().optional()
+        bus_id: z.string().uuid().optional(),
+        connections: singleConnectionSchema
     }).refine(data => data.min_capacity <= data.max_capacity, {
         message: "Min capacity must be less than or equal to max capacity"
     })
@@ -77,8 +92,7 @@ export const transformerSchema = elementSchema.extend({
         tap_step_size: z.number().positive().optional(),
         winding_configuration: z.string().max(20).optional(),
         cooling_type: z.string().max(10).optional(),
-        primary_bus_id: z.string().uuid().optional(),
-        secondary_bus_id: z.string().uuid().optional()
+        connections: dualConnectionSchema
     })
 });
 
@@ -86,18 +100,22 @@ export const transformerSchema = elementSchema.extend({
 export const lineSchema = elementSchema.extend({
     type: z.literal('line'),
     line_properties: z.object({
-        from_bus_id: z.string().uuid(),
-        to_bus_id: z.string().uuid(),
-        length: z.number().positive(),
-        voltage_level: z.number().positive(),
+        length: z.coerce.number().positive().optional(),
+        voltage_level: z.coerce.number().positive('Voltage level must be positive'),
         conductor_type: z.string().max(20).optional(),
         configuration: z.string().max(20).optional(),
-        rated_current: z.number().positive().optional(),
-        resistance: z.number().nonnegative().optional(),
-        reactance: z.number().nonnegative().optional(),
-        capacitance: z.number().nonnegative().optional()
-    }).refine(data => data.from_bus_id !== data.to_bus_id, {
-        message: "From and to bus IDs must be different"
+        rated_current: z.coerce.number().positive().optional(),
+        resistance: z.coerce.number().nonnegative().optional(),
+        reactance: z.coerce.number().nonnegative().optional(),
+        capacitance: z.number().nonnegative().optional(),
+        coordinates: z.array(z.object({
+            latitude: z.coerce.number().min(-90).max(90, 'Invalid latitude'),
+            longitude: z.coerce.number().min(-180).max(180, 'Invalid longitude'),
+            elevation: z.coerce.number().optional(),
+            point_type: z.enum(['start', 'end', 'intermediate', 'tower', 'junction']),
+            description: z.string().optional()
+          })).min(2, 'At least 2 coordinate points are required').optional(),
+        connections: dualConnectionSchema
     })
 });
 

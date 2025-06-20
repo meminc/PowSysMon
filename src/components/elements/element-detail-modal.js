@@ -22,6 +22,7 @@ import { useMeasurements } from '@/hooks/api/useMeasurements';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function ElementDetailModal({ element, onClose, onEdit }) {
+  console.log(element);
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('overview');
   
